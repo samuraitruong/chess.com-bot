@@ -14,3 +14,8 @@ This project aims to build automation tools that place games on chess.com with t
     yarn && yarn start
 
 ```
+
+
+## Warning
+
+Use at your own risk, Chess.com will detect and ban your account after few games
