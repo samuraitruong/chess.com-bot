@@ -278,6 +278,10 @@ async function clickAt(page, square, fromSquare) {
   await page.mouse.click(x, y);
 }
 async function isGameOver(page) {
+  const url = await page.url();
+  if (url.includes("membership")) {
+    return true;
+  }
   const el = await page.$(".game-over-modal-content");
   if (el) {
     console.log("The game is over!");
@@ -293,9 +297,12 @@ async function isGameOver(page) {
     return true;
   }
 
-  return false;
+  https: return false;
 }
 async function playWithBestMove(page, isPlayVsHuman, callback) {
+  if (busy) return;
+  busy = true;
+
   if (isPlayVsHuman) {
     await delay(Math.random() * RANDOM_MOVE_TIMES);
     // close the leagues division
@@ -303,8 +310,6 @@ async function playWithBestMove(page, isPlayVsHuman, callback) {
 
     await getPlayerInformation(page);
   }
-  if (busy) return;
-  busy = true;
 
   try {
     const checkIfOver = await isGameOver(page);
@@ -388,6 +393,9 @@ async function playWithBestMove(page, isPlayVsHuman, callback) {
     }
   } catch (err) {
     console.log(err);
+    if (err.message.includes("Session closed.")) {
+      await callback();
+    }
   }
 
   busy = false;
@@ -476,25 +484,31 @@ async function getPlayerInformation(page) {
   }
 }
 
-async function playWithHuman(page) {
+async function playWithHuman(page, category = "600") {
   await page.goto("https://www.chess.com/play/online");
-  await delay(2000);
+  delay(1000);
   await clickon(page, '[data-cy="new-game-time-selector-button"]', 2000);
   await delay(1000);
 
-  await clickon(page, '[data-cy="time-selector-category-600"]', 2000);
+  await clickon(page, `[data-cy="time-selector-category-${category}"]`, 2000);
 
   await clickon(page, '[data-cy="new-game-index-play"]', 2000);
 
   await clickon(page, ".fair-play-button", 1000, true);
+
+  let interval = intervalCheck;
+  if (category === "60") {
+    interval = 500;
+  }
+
   playIntervalId = setInterval(async () => {
     await playWithBestMove(page, true, async () => {
       // start the new game
       await delay(5000);
       busy = false;
-      await playWithHuman(page);
+      await playWithHuman(page, category);
     });
-  }, intervalCheck);
+  }, interval);
 
   // waiting for new game
 }
@@ -513,6 +527,7 @@ const playWithComputer = async (page) => {
     await clickon(page, "div[data-cy='Challenge']", 1000);
     await clickon(page, "button[title='Play']", 1000);
   }
+
   console.log("start interval");
   playIntervalId = setInterval(async () => {
     await playWithBestMove(page, true, async () => {
@@ -534,6 +549,10 @@ async function main() {
     handleSIGTERM: true,
     args: ["--mute-audio"],
   });
+
+  const context = browser.defaultBrowserContext();
+  context.overridePermissions("https://www.chess.com", ["notifications"]);
+
   const page = await browser.newPage();
   await page.setViewport({ width: 1366, height: 1024 });
 
@@ -541,13 +560,28 @@ async function main() {
 
   console.log("Successfull login ");
   const mode = process.argv[2];
+  const category = process.argv[3] || "600";
+
   if (mode === "computer") {
     await playWithComputer(page);
   }
 
   if (mode === "human") {
-    await playWithHuman(page);
+    await playWithHuman(page, category);
   }
+}
+
+async function aliveWatcher(page) {
+  const url = await page.url();
+  // check if url is changed
+  // check if ui is not playing UI
+  // check if game is stuck
+  if (!url.includes("game/live") || !url.includes("overview")) {
+    // game is dead
+    return false;
+  }
+
+  return true;
 }
 
 async function playOfflineGames(page) {
